@@ -1,0 +1,203 @@
+---
+title: "Discriminant Analysis"
+
+
+```{r}
+rm(list=ls())
+data <- read.csv('online_shoppers_intention.csv', header = TRUE)
+```
+
+```{R}
+library(dplyr)
+data <- data %>% mutate(Month = case_when(Month == "Feb" ~ 2,
+                                     Month == "Mar" ~ 3,
+                                     Month == "May" ~ 5,
+                                     Month == "June" ~ 6,
+                                     Month == "Jul" ~ 7,
+                                     Month == "Aug" ~ 8,
+                                     Month == "Sep" ~ 9,
+                                     Month == "Oct" ~ 10,
+                                     Month == "Nov" ~ 11,
+                                     Month == "Dec" ~ 12))
+
+data <- data %>% mutate(VisitorType = case_when(VisitorType == "Returning_Visitor" ~ 1, 
+                                     VisitorType == "New_Visitor" ~ 2,
+                                     VisitorType == "Other" ~ 3))
+
+data <- data %>% mutate(Weekend = case_when(Weekend == TRUE ~ 1, 
+                                     Weekend == FALSE ~ 0))
+
+data <- data %>% mutate(Revenue = case_when(Revenue == TRUE ~ 1, 
+                                       Revenue == FALSE ~ 0))
+
+data$OperatingSystems = as.integer(data$OperatingSystems)
+data$Browser = as.integer(data$Browser)
+data$Region = as.integer(data$Region)
+data$TrafficType = as.integer(data$TrafficType)
+```
+
+
+```{R}
+library(caret)
+
+set.seed(7406)
+index <- createDataPartition(data$Revenue, p=0.80, list = FALSE, times = 1)
+df_train = data[index,]
+df_test = data[-index,]
+
+table(df_test$Revenue)
+prop.table(table(df_test$Revenue))
+
+table(df_train$Revenue)
+prop.table(table(df_train$Revenue))
+
+```
+
+As we can see, the original dataset contains 15.47% of TRUE cases and 85.43% FALSE cases. We have imbalanced data set. One way to handle imbalanced data set is oversampling, which works with minority class. An advantage of using this method is that it leads to no information loss. The disadvantage of using this method is that, since oversampling simply adds replicated observations in original data set, it ends up adding multiple observations of several types, thus leading to overfitting. Although, the training accuracy of such data set will be high, but the accuracy on unseen data will be worse.
+
+USE package 'ROSE' to handle imbalanced data. 
+
+```{r}
+library(ROSE)
+
+df_rose <- ROSE(Revenue~., data = df_train, seed =1)$data
+table(df_rose$Revenue)
+```
+
+```{r}
+library(MASS)
+m0_lda <- lda(df_rose[,1:17], df_rose[,18])
+m0_lda
+```
+
+The aim of LDA:
+-maximize the distance between two groups (the classes' group mean is placed as far as possible to ensure high confidence during prediction) 
+
+The LDA output indicates that our prior probability are 50.39% for group 0(Revenue False) and 49.61% for group 1(Revenue TRUE). 
+
+
+```{r}
+m0_lda$means
+```
+
+We can use stacked histogram to display discriminant function values from different groups. We can see the separation between these two groups are quite close with lots of overlapping.
+
+
+```{r}
+lda.values <- predict(m0_lda)
+ldahist(data = lda.values$x[,1], g=df_rose$Revenue)
+```
+
+
+```{r}
+library(caret)
+df_test$Revenue<-as.factor(df_test$Revenue)
+pred_lda <- predict(m0_lda,df_test[,1:17])$class
+ConMatrix_lda <- confusionMatrix(data = pred_lda, reference = df_test$Revenue)
+ConMatrix_lda
+```
+
+```{r}
+#fit another model with variables have significant difference in group mean
+df_rose1 <- df_rose[,c(2,4,5,6,9,18)]
+m1_lda <- lda(df_rose1[,1:5], df_rose1[,6])
+m1_lda
+```
+
+```{r}
+library(klaR)
+df_rose1$Revenue <- as.factor(df_rose1$Revenue)
+partimat(Revenue~.,data=df_rose1,method="lda")
+```
+
+As we can see, there are lots of overlapping between two groups. 
+
+```{r}
+plot(m1_lda)
+```
+
+```{r}
+library(caret)
+df_test$Revenue<-as.factor(df_test$Revenue)
+df_test1 <- df_test[,c(2,4,5,6,9,18)]
+pred1_lda <- predict(m1_lda,df_test1[,1:5])$class
+
+ConMatrix_lda1 <- confusionMatrix(data = pred1_lda, reference = df_test1$Revenue)
+ConMatrix_lda1
+```
+
+With less variables, we are able to improve model accuracy (misclassifcation rate decreased) but we have more cases on false positives (our model predicted the customers will make purchase but they dont actual make the purchase). 
+
+
+```{r}
+m_qda <- qda(df_rose[,1:17], df_rose[,18])
+m_qda
+```
+
+
+```{r}
+pred_qda <- predict(m_qda,df_test[,1:17])$class
+ConMatrix_qda <- confusionMatrix(data = pred_qda, reference = df_test$Revenue)
+ConMatrix_qda
+```
+
+
+```{r}
+library(ROSE)
+B=100
+set.seed(7406)
+TEALL = NULL 
+for (b in 1:B){
+  index_cv <- createDataPartition(data$Revenue, p=0.80, list = FALSE, times = 1)
+  df_train_cv = data[index_cv,]
+  df_test_cv = data[-index_cv,]
+  df_rose_cv <- ROSE(Revenue~., data = df_train_cv, seed =1)$data
+  
+  m1_lda <-lda(df_rose_cv[,1:17],df_rose_cv[,18])
+  pred1_cv <- predict(m1_lda, df_test_cv[,1:17])$class
+  TE_lda <- mean(pred1_cv == df_test_cv$Revenue)
+  
+  m1_qda <-qda(df_rose_cv[,1:17],df_rose_cv[,18])
+  pred2_cv <- predict(m1_qda, df_test_cv[,1:17])$class
+  TE_qda <- mean(pred2_cv == df_test_cv$Revenue)
+  
+  TEALL <- rbind(TEALL,cbind(TE_lda,TE_qda))
+} 
+
+
+colnames(TEALL) <- c("LDA", "QDA")              
+round(apply(TEALL, 2, mean),5)
+round(apply(TEALL, 2, var),5)
+```
+Overall, LDA performs better than QDA, since LDA have higher model accuracy. 
+
+Result:
+1.Found these variables have significant difference in group mean:
+- Administrative_Duration
+- Informational_Duration
+- ProductRelated
+- ProductRelated_Duration
+- PageValues
+Fitted a model with all these variable above, model accuracy have been improved. 
+
+2. Compared with QDA, a linear classifier is more suitable for our dataset since it has higher model accuracy.
+
+3. From our model output, we can see the separation between these two groups are quite close with lots of overlapping.
+
+
+Findings: 
+1. Customers who made purchase have page value of 27.3364 on average.
+2. For customer who made purchases, the amount of time spent on administrative page (eg. login, entering shipping/billing info), specific product page and product category page (looking for similar products) are significant higher than customers who did not make purchases. 
+3. Customers who did not make purchases have higher exit rate than customer who made purchases. 
+4. Customers who did not make purchases have higher bounce rate than customer who made purchases. (bounce rate is the percentage of visitors who enter the website through that page and exit without triggering any addition task)
+5. Surprisingly, with those variables have significant difference in group mean, they don't have large coefficient values. 
+
+```{r}
+coef = c(2.337417e-02,1.320386e-04,1.467700e-02,5.623113e-04,1.926169e-03,8.007664e-05,-1.556938e+00,-7.522570e+00,2.496501e-02,-5.601350e-01,5.360545e-02,-4.187995e-02,7.485834e-03,-1.361906e-02,-1.098067e-03,1.579287e-01,1.375565e-01)
+var = colnames(df_rose[,1:17])
+
+df_coef <- as.data.frame(cbind(var,as.numeric(coef)))
+ggplot(df_coef,aes(x=var,y=coef, fill=var))+geom_bar(stat="identity")+ coord_flip()+ theme(legend.position="none")+xlab('Variable')+ylab('LDA Coefficient')
+```
+
+

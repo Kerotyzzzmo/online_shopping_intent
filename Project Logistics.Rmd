@@ -1,0 +1,278 @@
+---
+title: "Project"
+output: html_document
+---
+
+```{r}
+rm(list=ls())
+```
+
+```{r}
+data <- read.csv('online_shoppers_intention.csv', header = TRUE)
+
+library(caret)
+library(dplyr)
+
+data$VisitorType <- as.factor(data$VisitorType)
+data$Month <- as.factor(data$Month)
+data$OperatingSystems <- as.factor(data$OperatingSystems)
+data$Browser <- as.factor(data$Browser)
+data$Region <- as.factor(data$Region)
+data$TrafficType <-as.factor(data$TrafficType)
+data$Weekend <- as.factor(data$Weekend)
+
+data <- data %>% mutate(Revenue = case_when(Revenue == TRUE ~ 1, 
+                                       Revenue == FALSE ~ 0))
+
+data$Revenue <- as.factor(data$Revenue)
+
+#no missing data
+colSums(is.na(data))
+
+str(data)
+```
+
+```{R}
+#check to see TRUE and FALSE observations
+table(data$Revenue)
+prop.table(table(data$Revenue))
+```
+
+As we can see, the original dataset contains 15.47% of TRUE cases and 85.43% FALSE cases. We have imbalanced data set. One way to handle imbalanced data set is oversampling, which works with minority class. An advantage of using this method is that it leads to no information loss. The disadvantage of using this method is that, since oversampling simply adds replicated observations in original data set, it ends up adding multiple observations of several types, thus leading to overfitting. Although, the training accuracy of such data set will be high, but the accuracy on unseen data will be worse.
+
+USE package 'ROSE' to handle imbalanced data. 
+
+
+```{r}
+set.seed(7406)
+index <- createDataPartition(data$Revenue, p=0.85, list = FALSE, times = 1)
+df_train = data[index,]
+df_test = data[-index,]
+
+table(df_test$Revenue)
+prop.table(table(df_test$Revenue))
+
+table(df_train$Revenue)
+prop.table(table(df_train$Revenue))
+```
+
+The data generated using ROSE is considered to provide better estimate on the training data
+```{r}
+library(ROSE)
+df_rose <- ROSE(Revenue~., data = df_train, seed =1)$data
+table(df_rose$Revenue)
+```
+
+```{r}
+#fit full model
+m0 <- glm(Revenue~., data = df_rose, family = binomial)
+summary(m0)
+```
+
+
+```{r}
+importances1 <- varImp(m0, scale = FALSE)
+
+importances1 <- importances1 %>%
+  arrange(desc(Overall)) %>%
+  top_n(10)
+
+ggplot(importances1, aes(x=reorder(rownames(importances1),Overall), y=Overall)) +
+geom_point( color="blue", size=4, alpha=0.6)+
+geom_segment( aes(x=rownames(importances1), xend=rownames(importances1), y=0, yend=Overall), 
+color='skyblue') +
+xlab('Variable')+
+ylab('Overall Importance')+
+theme_light() +
+coord_flip() 
+```
+
+Important variables from the full model: 
+- page value 
+- exit rate 
+- product related duration
+- traffic type: type 20, type 2
+- month: Dec, Mar, May, Nov
+
+Interpretation of coefficients: 
+- PageValue: an one unit increase in pagevalue changes the odds of making revenue by factor of e^(4.994e-02) = 1.0512, holding other predictors constant. 
+- MonthDec: For December, the odds for making revenue vs not making revenue are by factor of e^-6.812e-01 = 51%, compared to August, given all other features stay the same. 
+
+```{r}
+library(MASS)
+#Stepwise with AIC on both direction.
+m0_aic <- stepAIC(m0, trace = FALSE, direction = 'both')
+m0_aic
+```
+
+Test for subsets of coefficients
+Full model: m0 
+    Revenue ~ Administrative + Administrative_Duration + Informational + 
+    Informational_Duration + ProductRelated + ProductRelated_Duration + 
+    BounceRates + ExitRates + PageValues + SpecialDay + Month + 
+    OperatingSystems + Browser + Region + TrafficType + VisitorType + 
+    Weekend
+Reduced model: m0_aic
+    Revenue ~ Administrative + Informational + ProductRelated + ProductRelated_Duration + BounceRates + ExitRates + PageValues + SpecialDay + Month + 
+    OperatingSystems + Browser + TrafficType + VisitorType + 
+    Weekend
+
+Ho: coefs of Administrative_Duration, Informational_Duration, Region are equal to zero
+Ha: coefs of Administrative_Duration, Informational_Duration, Region are NOT equal to zero
+
+Since the p value > 0.05, we fail to reject null hypothesis. Therefore, the coefficients of Administrative_Duration, Informational_Duration, Region are equal to zero. 
+
+```{r}
+anova(m0_aic,m0,test = 'Chisq')
+```
+
+Goodness of fit 
+Ho: the logistic model fits the data vs. 
+Ha the logistic model does not fit the data
+
+The p value suggested that the logistics model does not fit the data. Goodness of fit is how well a model can predict observed value using model estimated parameters. However, it does not mean that the independent variables are not good predictors to predict the outcome. Also, goodness of fit does not guarantee good predictions. 
+
+
+```{r}
+#pearson 
+pearres = residuals(m0,type="pearson")
+pearson.tvalue = sum(pearres^2)
+1-pchisq(pearson.tvalue,10481-18-1)
+
+pearres2 = residuals(m0_aic,type="pearson")
+pearson.tvalue2 = sum(pearres2^2)
+1-pchisq(pearson.tvalue2,10481-14-1)
+```
+
+
+```{r}
+importances2 <- varImp(m0_aic, scale = FALSE)
+
+importances2 <- importances2 %>%
+  arrange(desc(Overall)) %>%
+  top_n(10)
+
+ggplot(importances2, aes(x=reorder(rownames(importances2),Overall), y=Overall)) +
+geom_point(color="blue", size=4, alpha=0.6)+
+geom_segment( aes(x=rownames(importances2), xend=rownames(importances2), y=0, yend=Overall), 
+color='skyblue') +
+xlab('Variable')+
+ylab('Overall Importance')+
+theme_light() +
+coord_flip() 
+```
+
+important variable from aic model:
+- page value 
+- exit rate 
+- product related duration 
+- traffic type: 20, 2 and 5
+- month: Dec Mar, May 
+- information 
+
+1. people are more likely to make purchases in May, March, December. 
+2. Traffic type 20 and 2 seem to have significant predictive power to Revnue 
+
+```{R}
+result <- NULL
+result_table <- NULL
+threshold = seq(0.5,0.9,0.05)
+for (t in threshold) {
+  
+  pred_t=predict(m0_aic,newdata = df_test[,1:17], type = 'response')
+  predClass_t= ifelse(pred_t>t,1,0)
+  accuracy = mean(predClass_t == df_test$Revenue)
+  result=cbind(t, accuracy)
+  result_table <- rbind(result_table, result)
+}
+result_table <- as.data.frame(result_table)
+result_table
+ggplot(result_table, aes(t,accuracy))+geom_point()+xlab('Threshold')+ylab('Prediction Accuracy')+geom_line(color='blue')
+```
+
+When misclassification threshold at 0.75, the AIC model has the highest accuracy. 
+
+```{r}
+pred =predict(m0,newdata = df_test[,1:17], type = 'response')
+predClass_0.75= ifelse(pred>0.75,1,0)
+table(predClass_0.75,df_test$Revenue)
+confusionMatrix(factor(predClass_0.75),df_test$Revenue)
+
+library(pROC)
+roc0.75 = roc(df_test$Revenue,predClass_0.75, plot =TRUE, print.auc=TRUE)
+```
+
+```{R}
+table(predClass_0.75,df_test$Revenue)
+```
+
+
+```{r}
+predClass_0.50= ifelse(pred>0.5,1,0)
+confusionMatrix(factor(predClass_0.50),df_test$Revenue)
+roc0.50 = roc(df_test$Revenue,predClass_0.50, plot =TRUE, print.auc=TRUE)
+```
+
+```{r}
+table(predClass_0.50,df_test$Revenue)
+```
+
+Compare to default threshold at 0.5, when misclassification threshold at 0.75, the model have the highest accuracy but it has more false positive cases (the model predict making revenue but customers do not buy).
+
+
+Use 10-folds cross validation 
+```{r}
+control <- trainControl(method = 'cv', number = 10)
+m0_cv <- train(Revenue~., data = df_rose, trControl=control, method='glm', family=binomial(link='logit'))
+mOaic_cv <- train(Revenue ~ Administrative + Informational + ProductRelated + ProductRelated_Duration + 
+    BounceRates + ExitRates + PageValues + SpecialDay + Month + 
+    OperatingSystems + Browser + TrafficType + VisitorType + 
+    Weekend, data = df_rose, trControl=control, method='glm', family=binomial(link='logit'))
+summary(mOaic_cv)
+```
+
+```{r}
+pred_cv = predict(m0_cv,df_test[,1:17])
+ConMatrix1 <- confusionMatrix(data = pred_cv, reference = df_test$Revenue)
+ConMatrix1
+```
+
+
+```{r}
+library(pROC)
+roc1 = roc(df_test$Revenue,as.numeric(pred_cv), plot =TRUE, print.auc=TRUE,main='Full Model ROC')
+```
+
+AUC tells how well the model predicts. 
+The Area Under the Curve is the measure of the ability of a classifier to distinguish between classes and is used as a summary of the ROC curve. The higher the AUC, the better the performance of the model at distinguishing between the positive and negative classes.
+
+```{r}
+pred_aic <- predict(mOaic_cv,df_test[,1:17])
+ConMatrix_aic <- confusionMatrix(data = pred_aic, reference = df_test$Revenue)
+ConMatrix_aic
+```
+
+
+```{r}
+library(pROC)
+roc2 = roc(df_test$Revenue,as.numeric(pred_aic), plot =TRUE, print.auc=TRUE, main="Reduced Model ROC")
+```
+
+
+Result:
+- By performed 10-folds cross validation for the full model and reduce model, the AUC values suggested that our model has been improved by variable selection with stepwise on both direction by measuring AIC. In addition, test for subset of coefficients supports that Administrative_Duration, Informational_Duration, Region are not significant in making prediction.
+
+- The result of Goodness of fit test suggested that the reduced model is not adequate fit for the dataset. Godness of fit does not guarantee good predictions and it does not mean that our independent variables are not gpod predictors to our dependent variable. 
+
+- PageValue, exitRate, productRelated_Duration,month, traffic type are remaining to be most important variables in classifying Revenue, even though we preformed variable selection. 
+
+Findings:
+- Decision boundary helps to differentiate probability into positive class and negative class. Our final model has the highest accuracy when misclassification threshold reaches to 0.75 and then it starts to decrease. Even though we have a more accurate model, we resulted in more false positive case, which could result in loss of revenue. 
+
+- people are more likely to make purchases in May, March, December from the reduced model. 
+
+
+
+
+
+
