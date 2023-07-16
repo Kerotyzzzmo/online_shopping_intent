@@ -165,13 +165,13 @@ coord_flip()
 important variable from aic model:
 - page value 
 - exit rate 
-- product related duration 
+- product-related duration 
 - traffic type: 20, 2 and 5
-- month: Dec Mar, May 
+- month: Dec, Mar, May 
 - information 
 
-1. people are more likely to make purchases in May, March, December. 
-2. Traffic type 20 and 2 seem to have significant predictive power to Revnue 
+1. people are more likely to make purchases in May, March, and December. 
+2. Traffic types 20 and 2 seem to have significant predictive power to Revenue 
 
 ```{R}
 result <- NULL
@@ -190,7 +190,7 @@ result_table
 ggplot(result_table, aes(t,accuracy))+geom_point()+xlab('Threshold')+ylab('Prediction Accuracy')+geom_line(color='blue')
 ```
 
-When misclassification threshold at 0.75, the AIC model has the highest accuracy. 
+When the misclassification threshold is at 0.75, the AIC model has the highest accuracy. 
 
 ```{r}
 pred =predict(m0,newdata = df_test[,1:17], type = 'response')
@@ -217,7 +217,7 @@ roc0.50 = roc(df_test$Revenue,predClass_0.50, plot =TRUE, print.auc=TRUE)
 table(predClass_0.50,df_test$Revenue)
 ```
 
-Compare to default threshold at 0.5, when misclassification threshold at 0.75, the model have the highest accuracy but it has more false positive cases (the model predict making revenue but customers do not buy).
+Compare to the default threshold of 0.5, when the misclassification threshold is at 0.75, the model has the highest accuracy but it has more false positive cases (the model predicts making revenue but customers do not buy).
 
 
 Use 10-folds cross validation 
@@ -259,17 +259,6 @@ roc2 = roc(df_test$Revenue,as.numeric(pred_aic), plot =TRUE, print.auc=TRUE, mai
 ```
 
 
-Result:
-- By performed 10-folds cross validation for the full model and reduce model, the AUC values suggested that our model has been improved by variable selection with stepwise on both direction by measuring AIC. In addition, test for subset of coefficients supports that Administrative_Duration, Informational_Duration, Region are not significant in making prediction.
-
-- The result of Goodness of fit test suggested that the reduced model is not adequate fit for the dataset. Godness of fit does not guarantee good predictions and it does not mean that our independent variables are not gpod predictors to our dependent variable. 
-
-- PageValue, exitRate, productRelated_Duration,month, traffic type are remaining to be most important variables in classifying Revenue, even though we preformed variable selection. 
-
-Findings:
-- Decision boundary helps to differentiate probability into positive class and negative class. Our final model has the highest accuracy when misclassification threshold reaches to 0.75 and then it starts to decrease. Even though we have a more accurate model, we resulted in more false positive case, which could result in loss of revenue. 
-
-- people are more likely to make purchases in May, March, December from the reduced model. 
 
 
 
