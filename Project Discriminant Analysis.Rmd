@@ -73,14 +73,14 @@ m0_lda
 The aim of LDA:
 -maximize the distance between two groups (the classes' group mean is placed as far as possible to ensure high confidence during prediction) 
 
-The LDA output indicates that our prior probability are 50.39% for group 0(Revenue False) and 49.61% for group 1(Revenue TRUE). 
+The LDA output indicates that our prior probability is 50.39% for group 0(Revenue False) and 49.61% for group 1(Revenue TRUE). 
 
 
 ```{r}
 m0_lda$means
 ```
 
-We can use stacked histogram to display discriminant function values from different groups. We can see the separation between these two groups are quite close with lots of overlapping.
+We can use stacked histogram to display discriminant function values from different groups. We can see the separation between these two groups is quite close with lots of overlapping.
 
 
 ```{r}
@@ -98,7 +98,7 @@ ConMatrix_lda
 ```
 
 ```{r}
-#fit another model with variables have significant difference in group mean
+#fit another model with variables that have significant differences in group mean
 df_rose1 <- df_rose[,c(2,4,5,6,9,18)]
 m1_lda <- lda(df_rose1[,1:5], df_rose1[,6])
 m1_lda
@@ -126,7 +126,7 @@ ConMatrix_lda1 <- confusionMatrix(data = pred1_lda, reference = df_test1$Revenue
 ConMatrix_lda1
 ```
 
-With less variables, we are able to improve model accuracy (misclassifcation rate decreased) but we have more cases on false positives (our model predicted the customers will make purchase but they dont actual make the purchase). 
+With fewer variables, we are able to improve model accuracy (misclassification rate decreased) but we have more cases of false positives (our model predicted the customers will make purchase but they don't actually make the purchase). 
 
 
 ```{r}
@@ -171,26 +171,6 @@ round(apply(TEALL, 2, var),5)
 ```
 Overall, LDA performs better than QDA, since LDA have higher model accuracy. 
 
-Result:
-1.Found these variables have significant difference in group mean:
-- Administrative_Duration
-- Informational_Duration
-- ProductRelated
-- ProductRelated_Duration
-- PageValues
-Fitted a model with all these variable above, model accuracy have been improved. 
-
-2. Compared with QDA, a linear classifier is more suitable for our dataset since it has higher model accuracy.
-
-3. From our model output, we can see the separation between these two groups are quite close with lots of overlapping.
-
-
-Findings: 
-1. Customers who made purchase have page value of 27.3364 on average.
-2. For customer who made purchases, the amount of time spent on administrative page (eg. login, entering shipping/billing info), specific product page and product category page (looking for similar products) are significant higher than customers who did not make purchases. 
-3. Customers who did not make purchases have higher exit rate than customer who made purchases. 
-4. Customers who did not make purchases have higher bounce rate than customer who made purchases. (bounce rate is the percentage of visitors who enter the website through that page and exit without triggering any addition task)
-5. Surprisingly, with those variables have significant difference in group mean, they don't have large coefficient values. 
 
 ```{r}
 coef = c(2.337417e-02,1.320386e-04,1.467700e-02,5.623113e-04,1.926169e-03,8.007664e-05,-1.556938e+00,-7.522570e+00,2.496501e-02,-5.601350e-01,5.360545e-02,-4.187995e-02,7.485834e-03,-1.361906e-02,-1.098067e-03,1.579287e-01,1.375565e-01)
